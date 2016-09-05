@@ -1,11 +1,11 @@
 {
   "name": "applest-atem",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "A module to control Blackmagic Design ATEM Switchers.",
-  "homepage": "https://github.com/applest/node-applest-atem",
+  "homepage": "https://github.com/keylase/node-applest-atem",
   "repository": {
     "type": "git",
-    "url": "https://github.com/applest/node-applest-atem"
+    "url": "https://github.com/keylase/node-applest-atem"
   },
   "license": "MIT",
   "keywords": [
@@ -15,7 +15,7 @@
     "switcher",
     "video"
   ],
-  "author": "miyukki <yusei1128@gmail.com>",
+  "author": "miyukki <yusei1128@gmail.com>, keylase <keylase@gmail.com>",
   "main": "./lib/atem.js",
   "scripts": {
     "test": "mocha test",
