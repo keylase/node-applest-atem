@@ -63,6 +63,8 @@ class ATEM
       downstreamKeyOn: []
       downstreamKeyTie: []
       auxs: {}
+      downstreamKeyAuto: []
+      mediaPlayer: []
     audio:
       channels: {}
 
@@ -118,12 +120,12 @@ class ATEM
     buffer[19] = command.charCodeAt 3
     payload.copy(buffer, 20)
     @_sendPacket buffer
+    console.log 'SEND: ', command, buffer if DEBUG
     @localPackedId++
 
   _sendPacket: (buffer) ->
     buffer = new Buffer(buffer) unless Buffer.isBuffer(buffer)
 
-    console.log 'SEND', buffer if DEBUG
     @socket.send buffer, 0, buffer.length, @port, @address
 
   _receivePacket: (message, remote) =>
@@ -177,19 +179,24 @@ class ATEM
           label: @_parseString(buffer[22..25])
 
       when 'PrgI'
+        @state.video.mixEffect = @_parseNumber(buffer[0..0]);
         @state.video.programInput = @_parseNumber(buffer[2..3])
 
       when 'PrvI'
+        @state.video.mixEffect = @_parseNumber(buffer[0..0]);
         @state.video.previewInput = @_parseNumber(buffer[2..3])
 
       when 'TrPr'
+        @state.video.mixEffect = @_parseNumber(buffer[0..0])
         @state.video.transitionPreview = if buffer[1] > 0 then true else false
 
       when 'TrPs'
+        @state.video.mixEffect = @_parseNumber(buffer[0..0])
         @state.video.transitionPosition = @_parseNumber(buffer[4..5])/10000 # 0 - 10000
         @state.video.transitionFrameCount = buffer[2] # 0 - 30
 
       when 'TrSS'
+        @state.video.mixEffect = @_parseNumber(buffer[0..0])
         @state.video.transitionStyle = @_parseNumber(buffer[0..1])
         @state.video.upstreamKeyNextBackground = (buffer[2] >> 0 & 1) == 0x01
         @state.video.upstreamKeyNextState[0] = (buffer[2] >> 1 & 1) == 0x01
@@ -199,21 +206,33 @@ class ATEM
           @state.video.upstreamKeyNextState[3] = (buffer[2] >> 4 & 1) == 0x01
 
       when 'DskS'
+        @state.video.downstreamKeyAuto[buffer[0]] = if buffer[3] == 1 then true else false
         @state.video.downstreamKeyOn[buffer[0]] = if buffer[1] == 1 then true else false
 
       when 'DskP'
         @state.video.downstreamKeyTie[buffer[0]] = if buffer[1] == 1 then true else false
 
       when 'KeOn'
+        @state.video.mixEffect = @_parseNumber(buffer[0..0])
         @state.video.upstreamKeyState[buffer[1]] = if buffer[2] == 1 then true else false
 
       when 'FtbS' # Fade To Black Setting
+        @state.video.mixEffect = @_parseNumber(buffer[0..0])
         @state.video.fadeToBlack = if buffer[1] > 0 then true else false
 
       when 'TlIn' # Tally Input
         @state.tallys = @_bufferToArray(buffer[2..])
 
+      when 'MPCE'
+        mediaPlayer =
+          type: buffer[1]
+          stilIndex: buffer[2]
+          clipIndex: buffer[3]
+        @state.video.mediaPlayer[buffer[0]] = mediaPlayer
+
       when 'AuxS' # Auxially Setting
+        # @state.video.mixEffect = 0
+        # @state.video.mixEffect = @_parseNumber(buffer[0..0])
         aux = buffer[0]
         @state.video.auxs[aux] = @_parseNumber(buffer[2..3])
 
@@ -301,11 +320,13 @@ class ATEM
     for key2 of obj2
       obj1[key2] = obj2[key2] if obj2.hasOwnProperty(key2)
 
-  changeProgramInput: (input) ->
-    @_sendCommand('CPgI', [0x00, 0x00, input >> 8, input & 0xFF])
+  changeProgramInput: (input, mixEffect) ->
+    me = mixEffect || 0x00
+    @_sendCommand('CPgI', [me, 0x00, input >> 8, input & 0xFF])
 
-  changePreviewInput: (input) ->
-    @_sendCommand('CPvI', [0x00, 0x00, input >> 8, input & 0xFF])
+  changePreviewInput: (input, mixEffect) ->
+    me = mixEffect || 0x00
+    @_sendCommand('CPvI', [me, 0x00, input >> 8, input & 0xFF])
 
   changeAuxInput: (aux, input) ->
     @_sendCommand('CAuS', [0x01, aux, input >> 8, input & 0xFF])
@@ -313,11 +334,13 @@ class ATEM
   fadeToBlack: ->
     @_sendCommand('FtbA', [0x00, 0x02, 0x58, 0x99])
 
-  autoTransition: ->
-    @_sendCommand('DAut', [0x00, 0x00, 0x00, 0x00])
+  autoTransition: (mixEffect)->
+    me = mixEffect || 0x00
+    @_sendCommand('DAut', [me, 0x00, 0x00, 0x00])
 
-  cutTransition: ->
-    @_sendCommand('DCut', [0x00, 0xef, 0xbf, 0x5f])
+  cutTransition: (mixEffect) ->
+    me = mixEffect || 0x00
+    @_sendCommand('DCut', [me, 0xef, 0xbf, 0x5f])
 
   changeTransitionPosition: (position) ->
     @_sendCommand('CTPs', [0x00, 0xe4, position/256, position%256])
@@ -335,26 +358,35 @@ class ATEM
   changeDownstreamKeyTie: (number, state) ->
     @_sendCommand('CDsT', [number, state, 0xff, 0xff])
 
-  changeUpstreamKeyState: (number, state) ->
-    @_sendCommand('CKOn', [0x00, number, state, 0x90])
+  changeUpstreamKeyState: (number, state, mixEffect) ->
+    me = mixEffect || 0x00
+    @_sendCommand('CKOn', [me, number, state, 0x90])
 
-  changeUpstreamKeyNextBackground: (state) ->
+  changeUpstreamKeyAuto: (number) ->
+    @_sendCommand('DDsA', [number,0x00,0x00,0x00])
+
+  changeUpstreamKeyNextBackground: (state, mixEffect) ->
+    me = mixEffect || 0x00
     @state.video.upstreamKeyNextBackground = state
     states = @state.video.upstreamKeyNextBackground +
       (@state.video.upstreamKeyNextState[0] << 1) +
       (@state.video.upstreamKeyNextState[1] << 2) +
       (@state.video.upstreamKeyNextState[2] << 3) +
       (@state.video.upstreamKeyNextState[3] << 4)
-    @_sendCommand('CTTp', [0x02, 0x00, 0x6a, states])
+    @_sendCommand('CTTp', [0x02, me, 0x6a, states])
 
-  changeUpstreamKeyNextState: (number, state) ->
+  changeUpstreamKeyNextState: (number, state, mixEffect) ->
+    me = mixEffect || 0x00
     @state.video.upstreamKeyNextState[number] = state
     states = @state.video.upstreamKeyNextBackground +
       (@state.video.upstreamKeyNextState[0] << 1) +
       (@state.video.upstreamKeyNextState[1] << 2) +
       (@state.video.upstreamKeyNextState[2] << 3) +
       (@state.video.upstreamKeyNextState[3] << 4)
-    @_sendCommand('CTTp', [0x02, 0x00, 0x6a, states])
+    @_sendCommand('CTTp', [0x02, me, 0x6a, states])
+
+  changeClipPlayer: (player, index) ->
+    @_sendCommand('MPSS', [0x03, player, 0x01, index, 0x00, 0x9d, 0x78, 0x10])
 
   changeAudioMasterGain: (gain) ->
     gain = gain * AUDIO_GAIN_RATE
