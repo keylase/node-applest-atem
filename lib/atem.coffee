@@ -197,7 +197,7 @@ class ATEM
 
       when 'TrSS'
         @state.video.mixEffect = @_parseNumber(buffer[0..0])
-        @state.video.transitionStyle = @_parseNumber(buffer[0..1])
+        @state.video.transitionStyle = @_parseNumber(buffer[1..1])
         @state.video.upstreamKeyNextBackground = (buffer[2] >> 0 & 1) == 0x01
         @state.video.upstreamKeyNextState[0] = (buffer[2] >> 1 & 1) == 0x01
         if @state.model != ATEM.Model.TVS && @state.model != ATEM.Model.PS4K
@@ -349,8 +349,9 @@ class ATEM
   changeTransitionPreview: (state) ->
     @_sendCommand('CTPr', [0x00, state, 0x00, 0x00])
 
-  changeTransitionType: (type) ->
-    @_sendCommand('CTTp', [0x01, 0x00, type, 0x02])
+  changeTransitionType: (type, mixEffect) ->
+    me = mixEffect || 0x00
+    @_sendCommand('CTTp', [0x01, me, type, 0x02])
 
   changeDownstreamKeyOn: (number, state) ->
     @_sendCommand('CDsL', [number, state, 0xff, 0xff])
